@@ -9,7 +9,9 @@ class test_mVSA(unittest.TestCase):
         self.VSA_cases = [[([2, True] ,[(3.6293938887919017, [1, 2]), (3.695342413844156, [0, 1, 2])]), ([4], [(6.708203932499369, [3]), (5.403933752369657, [0, 3]), (5.2, [1]), (5.197114584074513, [0])])], [([], [(6.640783086353596, [[0.1, 2.3, 4.2, 4.6]])])]]
 
     def tearDown(self):
-        self.cases = None
+        self.all_vectors = None
+        self.m_VS_cases = None
+        self.VSA_cases = None
 
     def test_m_VS(self):
         for idx, vectors in enumerate(self.all_vectors):
