@@ -90,6 +90,8 @@ class mVSA:
         
     def m_VS(self, m, top_k = 1, inverse = False):
         assert m <= len(self.vectors), "m must not be greater than #vectors"
+        if len(self.vectors) == 1:
+        	return [(self.sum_norm(self.vectors), self.vectors)]
         assert top_k <= len(self.SMA_reps), "top_k must not be greater than #SMA-representatives"
         candidates = []
         for SMA_rep in self.SMA_reps:
@@ -108,6 +110,8 @@ class mVSA:
             return heapq.nlargest(top_k, candidates, key = operator.itemgetter(0))
         
     def VSA(self, top_k = 1, inverse = False):
+    	if len(self.vectors) == 1:
+        	return [(self.sum_norm(self.vectors), self.vectors)]
         assert top_k <= len(self.vectors)*len(self.SMA_reps), "top_k must not be greater than #vectors * #SMA-representatives"
         candidates = []
         for SMA_rep in self.SMA_reps:
@@ -125,4 +129,3 @@ class mVSA:
             return heapq.nsmallest(top_k, candidates, key = operator.itemgetter(0))
         else:
             return heapq.nlargest(top_k, candidates, key = operator.itemgetter(0))
-            
