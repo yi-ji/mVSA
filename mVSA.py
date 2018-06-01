@@ -31,7 +31,7 @@ class mVSA:
         vec = [v for v in _vec]
         divisor = [1 for v in vec]
         for i in range(0, self.dim):
-            while abs(round(vec[i]) - vec[i]) > self.eps[0]:
+            while abs(round(vec[i]) - vec[i]) > > self.eps[0] * divisor[i]:
                 vec[i] *= 10
                 divisor[i] *= 10
             vec[i] = round(vec[i])
@@ -62,8 +62,8 @@ class mVSA:
         return False
     
     def SMA_representative(self, idx_vec, v_idx, cs, hps, SMA_reps):
-        if v_idx < len(self.hyperplanes) and idx_vec[0] == v_idx:
-            v_idx += 1
+        if idx_vec[0] == v_idx:
+        	v_idx += 1
             hps.append(True)
         if v_idx >= len(self.hyperplanes):
             generators = NNC_Polyhedron(cs).minimized_generators()
