@@ -7,6 +7,8 @@ This repo contains implementation of solutions for some vector subset choice (or
 
 also enriching the original algorithms with top-*k* extension.
 
+All input vectors must be nonzero and unique (when *k* > 1).
+
 ## Python Implementation
 
 ### Requirement
