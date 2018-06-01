@@ -7,32 +7,36 @@ class mVSA:
         assert len(vectors) > 0, "There must be at least 1 vector"
         vec_len = [len(vec) for vec in vectors]
         assert vec_len[1:] == vec_len[:-1], "All vectors must have same length"
-        self.vectors = vectors
         self.dim = vec_len[0]
+        for vec in vectors:
+            assert vec != [0] * self.dim, "All vectors must be nonzero" 
+        self.vectors = vectors
         self.axis = [Variable(i) for i in range(0, self.dim)]
+        self.hyperplanes = None
+        self.eps = (1e-8, 1e-3)
         vec_num = len(vectors)
         self.sub_vectors = [[vectors[i][k]-vectors[j][k] for k in range(0, self.dim)] 
                             for i in range(0, vec_num) for j in range(i+1, vec_num)]
+        self.sub_vectors = filter(lambda x : x != [0] * self.dim, self.sub_vectors)
         self.SMA_reps = self.SMA_representatives(self.sub_vectors)
-        
-    def is_close(self, a, b, epsilon = 1e-7):
-        min_abs = min(abs(a), abs(b))
-        return min_abs == 0 or abs(a-b)/(min_abs+0.0) < epsilon
+    
+    def norm(self, vec):
+        return math.sqrt(sum([vec[i]*vec[i] for i in range(0, self.dim)]))
         
     def sum_norm(self, vectors):
         vec_sum = [sum([vec[i] for vec in vectors]) for i in range(0, self.dim)]
-        return math.sqrt(sum([vec_sum[i]*vec_sum[i] for i in range(0, self.dim)]))
-    
-    def to_integer(self, num):
-        divisor = 1
-        while not self.is_close(long(num), num):
-            num *= 10
-            divisor *= 10
-        return divisor
+        return self.norm(vec_sum)
         
-    def hyperplane(self, vec):
-        divisor = max([self.to_integer(vec[i]) for i in range(0, self.dim)])
-        return sum([(vec[i]*divisor) * self.axis[i] for i in range(0, self.dim)])
+    def hyperplane(self, _vec):
+        vec = [v for v in _vec]
+        divisor = [1 for v in vec]
+        for i in range(0, self.dim):
+            while abs(round(vec[i]) - vec[i]) > self.eps[0]:
+                vec[i] *= 10
+                divisor[i] *= 10
+            vec[i] = round(vec[i])
+        max_divisor = max(divisor)
+        return sum([(vec[i]*max_divisor/divisor[i]) * self.axis[i] for i in range(0, self.dim)])
     
     def linear_order(self, vec):
         def linear_order_v(vec1, vec2):
@@ -43,72 +47,75 @@ class mVSA:
     def support_point(self, generators):
         for generator in generators:
             if generator.is_point() and generator.space_dimension() != 0:
-                supp_p = [float((coef+0.0)/generator.divisor()) for coef in generator.coefficients()]
-                norm = math.sqrt(sum([supp_p[i]*supp_p[i] for i in range(0, self.dim)]))
-                return tuple(coef/norm for coef in supp_p)
+                supp_p = [(coef+0.0)/generator.divisor() for coef in generator.coefficients()]
+                vec_norm = self.norm(supp_p)
+                return tuple(float(coef/vec_norm) for coef in supp_p)
         return None
     
     def intersect(self, generators, vec):
         for generator in generators:
             if generator.is_ray():
                 ray_coord = generator.coefficients()
-                if self.is_close(sum([ray_coord[i]*vec[i] for i in range(0, self.dim)]), 0):
+                inner_product = sum([ray_coord[i]*vec[i] for i in range(0, self.dim)]) + 0.0
+                if abs(inner_product)/(self.norm(vec)*self.norm(ray_coord)) < self.eps[1]:
                     return True
         return False
     
-    def SMA_representative(self, vec, v_idx, vectors, cs):
-        if v_idx < len(vectors) and vec == vectors[v_idx]:
+    def SMA_representative(self, idx_vec, v_idx, cs, hps, SMA_reps):
+        if v_idx < len(self.hyperplanes) and idx_vec[0] == v_idx:
             v_idx += 1
-        if v_idx >= len(vectors):
+            hps.append(True)
+        if v_idx >= len(self.hyperplanes):
             generators = NNC_Polyhedron(cs).minimized_generators()
-            return [self.support_point(generators)]
-        cs_pos = Constraint_System(cs)
-        cs_neg = Constraint_System(cs)
-        v_hp = self.hyperplane(vectors[v_idx])
-        cs_pos.insert(v_hp > 0)
-        cs_neg.insert(v_hp < 0)
-        generators_pos = NNC_Polyhedron(cs_pos).minimized_generators()
-        generators_neg = NNC_Polyhedron(cs_neg).minimized_generators()
-        SMA_reps = []
-        if self.intersect(generators_pos, vec):
-            SMA_reps += self.SMA_representative(vec, v_idx+1, vectors, cs_pos)
-        if self.intersect(generators_neg, vec):
-            SMA_reps += self.SMA_representative(vec, v_idx+1, vectors, cs_neg)
-        return SMA_reps
+            SMA_reps.append((self.support_point(generators), hps))
+            cs_inv = Constraint_System()
+            for c in cs:
+                c_inv = sum([c.coefficient(self.axis[i])*self.axis[i] for i in range(0, self.dim)]) < 0
+                cs_inv.insert(c_inv)
+            generators_inv = NNC_Polyhedron(cs_inv).minimized_generators()
+            hps_inv = [False if hp else True for hp in hps]
+            SMA_reps.append((self.support_point(generators_inv), hps_inv))
+        else:
+            cs_pos = Constraint_System(cs)
+            cs_neg = Constraint_System(cs)
+            cs_pos.insert(self.hyperplanes[v_idx] > 0)
+            cs_neg.insert(self.hyperplanes[v_idx] < 0)
+            generators_pos = NNC_Polyhedron(cs_pos).minimized_generators()
+            generators_neg = NNC_Polyhedron(cs_neg).minimized_generators()
+            if self.intersect(generators_pos, idx_vec[1]):
+                self.SMA_representative(idx_vec, v_idx+1, cs_pos, hps+[True], SMA_reps)
+            if self.intersect(generators_neg, idx_vec[1]):
+                self.SMA_representative(idx_vec, v_idx+1, cs_neg, hps+[False], SMA_reps)
 
     def SMA_representatives(self, vectors):
-        SMA_reps = []
+        self.hyperplanes, SMA_reps = [], []
         for vec in vectors:
-            SMA_reps += self.SMA_representative(vec, 0, vectors, self.hyperplane(vec) > 0) 
-        cs = Constraint_System()
-        for vec in vectors:
-            cs.insert(self.hyperplane(vec) < 0)
-        generators = NNC_Polyhedron(cs).minimized_generators()
-        supp_p = self.support_point(generators)
-        if supp_p:
-            SMA_reps.append(supp_p)
+            self.hyperplanes.append(self.hyperplane(vec))
+        for idx, vec in enumerate(vectors):
+            self.SMA_representative((idx, vec), 0, self.hyperplanes[idx] > 0, [], SMA_reps) 
         SMA_reps_uniq = []
         for i in range(0, len(SMA_reps)):
             duplicate = False
             for j in range(i+1, len(SMA_reps)):
-                if all([self.is_close(SMA_reps[i][k], SMA_reps[j][k]) for k in range(0, self.dim)]):
+                if SMA_reps[i][1] == SMA_reps[j][1]:
                     duplicate = True
                     break
             if not duplicate:
-                SMA_reps_uniq.append(SMA_reps[i])
+                SMA_reps_uniq.append(SMA_reps[i][0])
         return SMA_reps_uniq
     
     def solve(self, M, average, top_k = 1, inverse = False):
-        if len(self.vectors) == 1:
+        vec_num = len(self.vectors)
+        if vec_num == 1:
             return [(self.sum_norm(self.vectors), self.vectors)]
-        assert top_k <= len(M)*len(self.SMA_reps), """top_k must not be greater than 
-        #SMA-representatives for m-VS or #vectors * #SMA-representatives for VSA"""
+        if top_k > 1:
+            assert len(self.sub_vectors)*2 == vec_num*(vec_num-1), "All vectors must be unique when top_k > 1"
         candidates = []
         for SMA_rep in self.SMA_reps:
-            indexed_vectors = zip(self.vectors, range(0, len(self.vectors)))
+            indexed_vectors = zip(self.vectors, range(0, vec_num))
             indexed_vectors.sort(self.linear_order(SMA_rep), key = operator.itemgetter(0), reverse = not inverse)
-            for vec_num in M:
-                [vectors, indices] = zip(*indexed_vectors[0:vec_num])
+            for m in M:
+                [vectors, indices] = zip(*indexed_vectors[0:m])
                 vec_sum_norm = self.sum_norm(vectors)
                 if average:
                     vec_sum_norm /= float(len(vectors))
@@ -118,6 +125,7 @@ class mVSA:
             if candidates[i][1] == candidates[i+1][1]:
                 candidates[i] = None
         candidates = filter(lambda x: x is not None, candidates)
+        top_k = min(top_k, len(candidates))
         if inverse:
             return heapq.nsmallest(top_k, candidates, key = operator.itemgetter(0))
         else:
@@ -129,3 +137,4 @@ class mVSA:
         
     def VSA(self, top_k = 1, inverse = False):
         return self.solve(range(1, len(self.vectors)+1), True, top_k, inverse)
+
