@@ -31,7 +31,7 @@ class mVSA:
         vec = [v for v in _vec]
         divisor = [1 for v in vec]
         for i in range(0, self.dim):
-            while abs(round(vec[i]) - vec[i]) > > self.eps[0] * divisor[i]:
+            while abs(round(vec[i]) - vec[i]) > self.eps[0] * divisor[i]:
                 vec[i] *= 10
                 divisor[i] *= 10
             vec[i] = round(vec[i])
