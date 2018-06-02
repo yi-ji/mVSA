@@ -40,8 +40,8 @@ All input vectors must be nonzero and unique (when *k* > 1).
 
 ### Usage
 
-Instantiation of any form within `mVSA<Subscriptable<Subscriptable<T>>>` can be accepted. </br>
-`Subscriptable` includes C++ STL `SequenceContainer` and raw pointers. </br>
+Instantiation of any form within `mVSA<{VectorSet<Subscriptable<T>>`, `VectorSet<T*>`, `T**}>` can be accepted. </br>
+`VectorSet` includes all C++ STL `SequenceContainer` and some `AssociativeContainer`. `Subscriptable` must support subscript [] operator for vector index. </br>
 The vectors dimension must be provided as a constructor parameter.
 
 ```C++
