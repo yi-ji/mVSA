@@ -6,6 +6,9 @@
 //  Copyright © 2018 jiyi. All rights reserved.
 //
 
+#ifndef mVSA_HPP
+#define mVSA_HPP
+
 #include "ppl.hh"
 #include <algorithm>
 #include <assert.h>
@@ -153,7 +156,7 @@ public:
                     vec_f.get()[i] = mpf_class(vec.get()[i]);
                 }
                 const mpf_class ray_vec_product = inner_product(ray, vec_f);
-                if (abs(ray_vec_product)/(norm(ray)*norm(vec_f)) < eps[1])
+                if (abs(ray_vec_product) / (norm(ray)*norm(vec_f)) < eps[1])
                     return true;
             }
         }
@@ -216,7 +219,7 @@ public:
         hyperplanes.clear();
         for (iter_t vi = arg_vectors.begin(); vi != arg_vectors.end(); ++vi)
             hyperplanes.push_back(hyperplane(*vi));
-        for (idx_t i = 0; i < dim; ++i)
+        for (idx_t i = 0; i < arg_vectors.size(); ++i)
             SMA_representative(arg_vectors, i, 0, Constraint_System(hyperplanes[i] > 0), std::vector<bool>(), arg_SMA_reps);
         std::vector<std::shared_ptr<mpz_class>> SMA_reps_uniq;
         for (auto i = arg_SMA_reps.begin(); i != arg_SMA_reps.end(); ++i)
@@ -307,27 +310,71 @@ public:
         SMA_reps = SMA_representatives(sub_vectors);
     }
     
+    std::function<bool(std::pair<double, std::vector<idx_t>>, std::pair<double, std::vector<idx_t>>)> norm_order(bool inverse)
+    {
+        return [inverse] (auto v1, auto v2) -> bool
+        {
+            bool cmp = v1.first < v2.first;
+            return inverse ? !cmp : cmp;
+        };
+    }
+    
+    std::function<bool(std::pair<double, std::vector<idx_t>>, std::pair<double, std::vector<idx_t>>)> space_order()
+    {
+        return [] (auto v1, auto v2) -> bool
+        {
+            if (v1.second.size() != v2.second.size())
+                return v1.second.size() < v2.second.size() ? true : false;
+            for (idx_t i = 0; i < v1.second.size(); ++i)
+            {
+                if (v1.second[i] < v2.second[i])
+                    return true;
+                else if (v1.second[i] > v2.second[i])
+                    return false;
+            }
+            return false;
+        };
+    }
+    
+    std::function<bool(std::pair<std::shared_ptr<const value_t>, idx_t>, std::pair<std::shared_ptr<const value_t>, idx_t>)> linear_order(const std::shared_ptr<mpz_class> SMA_rep)
+    {
+        return [this, SMA_rep] (auto v1, auto v2) -> bool
+        {
+            mpf_class order_v(0);
+            for (idx_t i = 0; i < dim; ++i)
+                order_v += mpf_class(v1.first.get()[i] - v2.first.get()[i]) * mpf_class(SMA_rep.get()[i]);
+            return order_v > 0 ? true : false;
+        };
+    }
+    
+    result_t select_top_k(result_t& result, idx_t top_k, bool inverse)
+    {
+        result_t top_k_result;
+        top_k = std::min(top_k, (idx_t) result.size());
+        auto heap_cmp = norm_order(inverse);
+        std::make_heap(result.begin(), result.end(), heap_cmp);
+        for (idx_t k = 0; k < top_k; ++k)
+        {
+            top_k_result.push_back(result.front());
+            std::pop_heap(result.begin(), result.end(), heap_cmp);
+            result.pop_back();
+        }
+        return top_k_result;
+    }
+    
     result_t solve(std::vector<idx_t> M, bool average, idx_t top_k, bool inverse)
     {
         if (vectors.size() == 1)
             return result_t(1, std::pair<double, std::vector<idx_t>>(sum_norm(vectors), std::vector<idx_t>(1, 0)));
         if (top_k > 1)
             assert(sub_vectors.size()*2 == vectors.size()*(vectors.size()-1) && "All vectors must be unique when top_k > 1");
-        result_t candidates, candidates_uniq, result;
+        result_t candidates, candidates_uniq;
         for (std::vector<std::shared_ptr<mpz_class>>::iterator rep_i = SMA_reps.begin(); rep_i != SMA_reps.end(); ++rep_i)
         {
             std::vector<std::pair<std::shared_ptr<const value_t>, idx_t>> indexed_vectors;
             for (idx_t v = 0; v < vectors.size(); ++v)
                 indexed_vectors.push_back(std::pair<std::shared_ptr<const value_t>, idx_t>(vectors[v], v));
-            std::shared_ptr<mpz_class> SMA_rep = *rep_i;
-            auto linear_order = [this, SMA_rep] (std::pair<std::shared_ptr<const value_t>, idx_t> v1, std::pair<std::shared_ptr<const value_t>, idx_t> v2) -> bool
-            {
-                mpf_class order_v(0);
-                for (idx_t i = 0; i < dim; ++i)
-                    order_v += mpf_class(v1.first.get()[i] - v2.first.get()[i]) * mpf_class(SMA_rep.get()[i]);
-                return order_v > 0 ? true : false;
-            };
-            std::sort(indexed_vectors.begin(), indexed_vectors.end(), linear_order);
+            std::sort(indexed_vectors.begin(), indexed_vectors.end(), linear_order(*rep_i));
             for (std::vector<idx_t>::iterator m = M.begin(); m != M.end(); ++m)
             {
                 std::vector<std::shared_ptr<const value_t>> m_vectors;
@@ -344,19 +391,7 @@ public:
                 candidates.push_back(std::pair<double, std::vector<idx_t>>(vec_sum_norm.get_d(), indices));
             }
         }
-        std::sort(candidates.begin(), candidates.end(), [] (std::pair<double, std::vector<idx_t>> v1, std::pair<double, std::vector<idx_t>> v2) -> bool
-        {
-            if (v1.second.size() != v2.second.size())
-                return v1.second.size() < v2.second.size() ? true : false;
-            for (idx_t i = 0; i < v1.second.size(); ++i)
-            {
-                if (v1.second[i] < v2.second[i])
-                    return true;
-                else if (v1.second[i] > v2.second[i])
-                    return false;
-            }
-            return false;
-        });
+        std::sort(candidates.begin(), candidates.end(), space_order());
         result_t::iterator i = candidates.begin(), j;
         candidates_uniq.push_back(*(i++));
         for (j = i-1; i != candidates.end(); j = i, ++i)
@@ -367,20 +402,52 @@ public:
             if (!same_indices)
                 candidates_uniq.push_back(*i);
         }
-        top_k = std::min(top_k, (idx_t) candidates_uniq.size());
-        auto heap_cmp = [inverse] (std::pair<double, std::vector<idx_t>> v1, std::pair<double, std::vector<idx_t>> v2) -> bool
+        return select_top_k(candidates_uniq, top_k, inverse);
+    }
+    
+    void m_power_set(idx_t m, idx_t idx, std::vector<idx_t> ps, std::vector<std::vector<idx_t>>& mps)
+    {
+        if (idx >= vectors.size() || ps.size() >= m)
         {
-            bool cmp = v1.first < v2.first;
-            return inverse ? !cmp : cmp;
-        };
-        std::make_heap(candidates_uniq.begin(), candidates_uniq.end(), heap_cmp);
-        for (idx_t i = 0; i < top_k; ++i)
-        {
-            result.push_back(candidates_uniq.front());
-            std::pop_heap(candidates_uniq.begin(), candidates_uniq.end(), heap_cmp);
-            candidates_uniq.pop_back();
+            if (ps.size() == m)
+                mps.push_back(ps);
         }
-        return result;
+        else
+        {
+            m_power_set(m, idx+1, ps, mps);
+            ps.push_back(idx);
+            m_power_set(m, idx+1, ps, mps);
+        }
+    }
+    
+    result_t m_VS_brute_force(idx_t m, idx_t top_k = 1, bool inverse = false)
+    {
+        result_t result;
+        std::vector<std::vector<idx_t>> all_indices;
+        m_power_set(m, 0, std::vector<idx_t>(), all_indices);
+        for (std::vector<std::vector<idx_t>>::iterator i = all_indices.begin(); i != all_indices.end(); ++i)
+        {
+            vec_ptr_t arg_vectors;
+            for (std::vector<idx_t>::iterator j = i->begin(); j != i->end(); ++j)
+                arg_vectors.push_back(vectors[*j]);
+            result.push_back(std::pair<double, std::vector<idx_t>>(sum_norm(arg_vectors), *i));
+        }
+        return select_top_k(result, top_k, inverse);
+    }
+    
+    result_t VSA_brute_force(idx_t top_k = 1, bool inverse = false)
+    {
+        result_t result;
+        for (idx_t m = 1; m <= vectors.size(); ++m)
+        {
+            result_t m_result = m_VS_brute_force(m, top_k, inverse);
+            for (result_t::iterator i = m_result.begin(); i != m_result.end(); ++i)
+            {
+                i->first /= double(m);
+                result.push_back(*i);
+            }
+        }
+        return select_top_k(result, top_k, inverse);
     }
     
     result_t m_VS(idx_t m, idx_t top_k = 1, bool inverse = false)
@@ -406,3 +473,5 @@ private:
     const idx_t dim;
     const mpf_class eps[2] = {1e-6, 1e-3};
 };
+
+#endif
