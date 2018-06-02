@@ -7,11 +7,10 @@
 //
 
 #include "ppl.hh"
-#include <vector>
 #include <algorithm>
 #include <assert.h>
 #include <math.h>
-#include <iostream> // remove this after debug
+#include <iostream> // for debug
 
 using namespace Parma_Polyhedra_Library;
 
@@ -43,6 +42,7 @@ public:
     typedef typename std::vector<std::shared_ptr<const value_t>>::const_iterator iter_t;
     typedef typename std::vector<std::shared_ptr<const value_t>> vec_ptr_t;
     typedef unsigned int idx_t;
+    typedef typename std::vector<std::pair<double, std::vector<idx_t>>> result_t;
     
     mVSA(const T& arg_vectors, const idx_t arg_dim) : dim(arg_dim)
     {
@@ -82,9 +82,9 @@ public:
         return sqrt(inner_product(vec, vec));
     }
     
-    const mpf_class sum_norm(const vec_ptr_t& arg_vectors) const
+    const double sum_norm(const vec_ptr_t& arg_vectors) const
     {
-        std::shared_ptr<mpf_class> vec(new mpf_class[dim], std::default_delete<value_t[]>());
+        std::shared_ptr<mpf_class> vec(new mpf_class[dim], std::default_delete<mpf_class[]>());
         for (idx_t i = 0; i < dim; ++i)
             vec.get()[i] = mpf_class(0);
         for (iter_t vi = arg_vectors.begin(); vi != arg_vectors.end(); ++vi)
@@ -92,7 +92,7 @@ public:
             for (idx_t i = 0; i < dim; ++i)
                 vec.get()[i] += mpf_class(vi->get()[i]);
         }
-        return norm(vec);
+        return norm(vec).get_d();
     }
     
     Linear_Expression hyperplane(const std::shared_ptr<const value_t> _vec) const
@@ -118,8 +118,6 @@ public:
         Linear_Expression le;
         for (idx_t i = 0; i < dim; ++i)
             le += (vec.get()[i] * max_divisor / divisor.get()[i]) * axis[i];
-        le.print();
-        std::cout << std::endl;
         return le;
     }
     
@@ -220,7 +218,6 @@ public:
             hyperplanes.push_back(hyperplane(*vi));
         for (idx_t i = 0; i < dim; ++i)
             SMA_representative(arg_vectors, i, 0, Constraint_System(hyperplanes[i] > 0), std::vector<bool>(), arg_SMA_reps);
-        //print_SMA_reps(arg_SMA_reps);
         std::vector<std::shared_ptr<mpz_class>> SMA_reps_uniq;
         for (auto i = arg_SMA_reps.begin(); i != arg_SMA_reps.end(); ++i)
         {
@@ -236,10 +233,10 @@ public:
             if (j == arg_SMA_reps.end())
                 SMA_reps_uniq.push_back(i->first);
         }
-        print_SMA_reps(SMA_reps_uniq);
         return SMA_reps_uniq;
     }
     
+    // for debug
     void print_SMA_reps(const std::vector<std::shared_ptr<mpz_class>>& arg_SMA_reps)
     {
         std::cout << arg_SMA_reps.size() << std::endl;
@@ -252,6 +249,7 @@ public:
         }
     }
     
+    // for debug
     void print_SMA_reps(const std::vector<std::pair<std::shared_ptr<mpz_class>, std::vector<bool>>>& arg_SMA_reps)
     {
         std::cout << arg_SMA_reps.size() << std::endl;
@@ -263,22 +261,34 @@ public:
             std::cout << "], ";
             std::vector<bool> hps = arg_SMA_reps[i].second;
             for (std::vector<bool>::iterator vi = hps.begin(); vi != hps.end(); ++vi)
-            {
                 std::cout << *vi << ", ";
-            }
             std::cout << std::endl;
         }
     }
     
+    // for debug
+    void print_result(const result_t& result)
+    {
+        std::cout << "[";
+        for (typename result_t::const_iterator i = result.begin(); i != result.end(); ++i)
+        {
+            std::cout << "(" << i->first << ", [";
+            for (std::vector<idx_t>::const_iterator j = i->second.begin(); j != i->second.end(); ++j)
+                std::cout << *j << ", ";
+            std::cout << "]), ";
+        }
+        std::cout << "]" << std::endl;
+    }
+    
     void init()
     {
-        assert(vectors.size() > 0 && dim > 0);
+        assert(vectors.size() > 0 && dim > 0 && "There must be at lease 1 vector");
         for (iter_t vi = vectors.begin(); vi != vectors.end(); ++vi)
         {
             bool nonzero = false;
             for (idx_t i = 0; i < dim; ++i)
                 nonzero = nonzero || vi->get()[i] != 0;
-            assert(nonzero);
+            assert(nonzero && "All vectors must be nonzero");
             for (iter_t vj = vi+1; vj != vectors.end(); ++vj)
             {
                 std::shared_ptr<value_t> sub_vec(new value_t[dim], std::default_delete<value_t[]>());
@@ -295,6 +305,96 @@ public:
         for (idx_t i = 0; i < dim; ++i)
             axis.push_back(Variable(i));
         SMA_reps = SMA_representatives(sub_vectors);
+    }
+    
+    result_t solve(std::vector<idx_t> M, bool average, idx_t top_k, bool inverse)
+    {
+        if (vectors.size() == 1)
+            return result_t(1, std::pair<double, std::vector<idx_t>>(sum_norm(vectors), std::vector<idx_t>(1, 0)));
+        if (top_k > 1)
+            assert(sub_vectors.size()*2 == vectors.size()*(vectors.size()-1) && "All vectors must be unique when top_k > 1");
+        result_t candidates, candidates_uniq, result;
+        for (std::vector<std::shared_ptr<mpz_class>>::iterator rep_i = SMA_reps.begin(); rep_i != SMA_reps.end(); ++rep_i)
+        {
+            std::vector<std::pair<std::shared_ptr<const value_t>, idx_t>> indexed_vectors;
+            for (idx_t v = 0; v < vectors.size(); ++v)
+                indexed_vectors.push_back(std::pair<std::shared_ptr<const value_t>, idx_t>(vectors[v], v));
+            std::shared_ptr<mpz_class> SMA_rep = *rep_i;
+            auto linear_order = [this, SMA_rep] (std::pair<std::shared_ptr<const value_t>, idx_t> v1, std::pair<std::shared_ptr<const value_t>, idx_t> v2) -> bool
+            {
+                mpf_class order_v(0);
+                for (idx_t i = 0; i < dim; ++i)
+                    order_v += mpf_class(v1.first.get()[i] - v2.first.get()[i]) * mpf_class(SMA_rep.get()[i]);
+                return order_v > 0 ? true : false;
+            };
+            std::sort(indexed_vectors.begin(), indexed_vectors.end(), linear_order);
+            for (std::vector<idx_t>::iterator m = M.begin(); m != M.end(); ++m)
+            {
+                std::vector<std::shared_ptr<const value_t>> m_vectors;
+                std::vector<idx_t> indices;
+                for (idx_t i = 0; i < *m; ++i)
+                {
+                    m_vectors.push_back(indexed_vectors[i].first);
+                    indices.push_back(indexed_vectors[i].second);
+                }
+                std::sort(indices.begin(), indices.end());
+                mpf_class vec_sum_norm(sum_norm(m_vectors));
+                if (average)
+                    vec_sum_norm /= *m;
+                candidates.push_back(std::pair<double, std::vector<idx_t>>(vec_sum_norm.get_d(), indices));
+            }
+        }
+        std::sort(candidates.begin(), candidates.end(), [] (std::pair<double, std::vector<idx_t>> v1, std::pair<double, std::vector<idx_t>> v2) -> bool
+        {
+            if (v1.second.size() != v2.second.size())
+                return v1.second.size() < v2.second.size() ? true : false;
+            for (idx_t i = 0; i < v1.second.size(); ++i)
+            {
+                if (v1.second[i] < v2.second[i])
+                    return true;
+                else if (v1.second[i] > v2.second[i])
+                    return false;
+            }
+            return false;
+        });
+        result_t::iterator i = candidates.begin(), j;
+        candidates_uniq.push_back(*(i++));
+        for (j = i-1; i != candidates.end(); j = i, ++i)
+        {
+            bool same_indices = i->second.size() == j->second.size();
+            for (idx_t k = 0; k != i->second.size() && same_indices; ++k)
+                same_indices = same_indices && (i->second[k] == j->second[k]);
+            if (!same_indices)
+                candidates_uniq.push_back(*i);
+        }
+        top_k = std::min(top_k, (idx_t) candidates_uniq.size());
+        auto heap_cmp = [inverse] (std::pair<double, std::vector<idx_t>> v1, std::pair<double, std::vector<idx_t>> v2) -> bool
+        {
+            bool cmp = v1.first < v2.first;
+            return inverse ? !cmp : cmp;
+        };
+        std::make_heap(candidates_uniq.begin(), candidates_uniq.end(), heap_cmp);
+        for (idx_t i = 0; i < top_k; ++i)
+        {
+            result.push_back(candidates_uniq.front());
+            std::pop_heap(candidates_uniq.begin(), candidates_uniq.end(), heap_cmp);
+            candidates_uniq.pop_back();
+        }
+        return result;
+    }
+    
+    result_t m_VS(idx_t m, idx_t top_k = 1, bool inverse = false)
+    {
+        assert(m <= vectors.size() && "m must not be greater than #vectors");
+        return solve(std::vector<idx_t>(1, m), false, top_k, inverse);
+    }
+    
+    result_t VSA(idx_t top_k = 1, bool inverse = false)
+    {
+        std::vector<idx_t> M;
+        for (idx_t i = 1; i <= vectors.size(); ++i)
+            M.push_back(i);
+        return solve(M, true, top_k, inverse);
     }
     
 private:
