@@ -48,6 +48,7 @@ The vectors dimension must be provided as a constructor parameter.
 Output result is an ordered `std::vector<std::pair<double, std::vector<unsigned int>>>` where each pair consists of the max/min sum norm value and corresponding vector indices.
 
 ```C++
+#include <set>
 #include <array>
 #include <vector>
 #include "mVSA.hpp"
@@ -58,35 +59,35 @@ int main() // some examples
 {
     const float vs[5][4] = {{0.1, 2.3, 4.2, 4.6}, {12, 3.4, 4.33, 5.555}, {1, 3, 5, 6}, {4.2, 5, 9, 8}, {1, 4, 5.5, 6.4}};
     const int vs2[4][3] = {{1, 0, 5}, {5, 0, 0}, {1, 2, 3}, {2, 5, 4}};
+    double vs3[4][3] = {{1, 0, 5.1}, {5.2, 0, 0}, {1.1, 2, 3}, {2, 5, 4}};
     
     
     array<const float*, 5> vectors1 = {vs[0], vs[1], vs[2], vs[3], vs[4]};
     mVSA<array<const float*, 5>> mvsa1(vectors1, 4);
-    
     mvsa1.print_result(mvsa1.m_VS(3, 3, true));
     // output: [(24.4129, [0, 2, 4, ]), (26.2934, [0, 1, 2, ]), (27.1405, [0, 1, 4, ]), ]
-    
     mvsa1.print_result(mvsa1.VSA(5));
     // output: [(14.3236, [1, ]), (13.6982, [3, ]), (13.176, [1, 3, ]), (11.5584, [1, 3, 4, ]), (11.4635, [3, 4, ]), ]
     
     
     vector<vector<int>> vectors2 = {{1, 0, 5}, {5, 0, 0}, {1, 2, 3}, {2, 5, 4}};
     mVSA<vector<vector<int>>> mvsa2(vectors2, 3);
-    
     mvsa2.print_result(mvsa2.m_VS(2, 3));
     // output: [(10.7238, [0, 3, ]), (10.3441, [2, 3, ]), (9.48683, [1, 3, ]), ]
-    
     mvsa2.print_result(mvsa2.VSA(2, true));
     // output: [(3.5, [1, 2, ]), (3.60555, [0, 1, 2, ]), ]
     
     
-    const int* vsp[] = {vs2[0], vs2[1], vs2[2], vs2[3]};
-    mVSA<const int**> mvsa3(vsp, 4, 3);
-    
-    mvsa3.print_result(mvsa3.m_VS(3, 2, true));
-    // output: [(10.8167, [0, 1, 2, ]), (12.7279, [1, 2, 3, ]), ]
-    
+    set<double*> vectors3 = {vs3[0], vs3[1], vs3[2], vs3[3]};
+    mVSA<set<double*>> mvsa3(vectors3, 3);
     mvsa3.print_result(mvsa3.VSA(4));
+    // output: [(6.7082, [3, ]), (5.40393, [0, 3, ]), (5.2, [1, ]), (5.19711, [0, ]), ]
+    
+    const int* vsp[] = {vs2[0], vs2[1], vs2[2], vs2[3]};
+    mVSA<const int**> mvsa4(vsp, 4, 3);
+    mvsa4.print_result(mvsa4.m_VS(3, 2, true));
+    // output: [(10.8167, [0, 1, 2, ]), (12.7279, [1, 2, 3, ]), ]
+    mvsa4.print_result(mvsa4.VSA(4));
     // output: [(6.7082, [3, ]), (5.3619, [0, 3, ]), (5.17204, [2, 3, ]), (5.09902, [0, ]), ]
     
     return 0;
