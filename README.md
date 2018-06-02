@@ -2,8 +2,8 @@
 
 This repo contains implementation of solutions for some vector subset choice (or vector sum) problems, namely:
 
-- `m-VS`: Vector Subset with the Maximum/Minimum Sum Norm (*m* stands for given number of vectors, optional) <br/>
-- `VSA`: Vector Subset with the Maximum/Minumum Averaged Square of the Sum Norm
+- `m-VS`: *Vector Subset with the Maximum/Minimum Sum Norm* (`m` stands for given number of vectors, optional) <br/>
+- `VSA`: *Vector Subset with the Maximum/Minimum Averaged Square of the Sum Norm*
 
 also enriching the original algorithms with top-*k* extension.
 
@@ -40,14 +40,16 @@ All input vectors must be nonzero and unique (when *k* > 1).
 
 ### Usage
 
-Instantiation of any form within `mVSA<{VectorSet<Subscriptable<T>>`, `VectorSet<T*>`, `T**}>` can be accepted. </br>
-`VectorSet` includes all C++ STL `SequenceContainer` and some `AssociativeContainer`. `Subscriptable` must support subscript [] operator for vector index. </br>
+Instantiation by any template parameter within `mVSA<{VectorSet<Subscriptable<T>>`, `VectorSet<T*>`, `T**}>` can be accepted. </br>
+`VectorSet` allows all C++ STL `SequenceContainer` and some `AssociativeContainer`. </br>
+`Subscriptable` must support subscript [] operator for vector indexing. </br>
 The vectors dimension must be provided as a constructor parameter.
+
+Output result is an ordered `std::vector<std::pair<double, std::vector<unsigned int>>>` where each pair consists of the max/min sum norm value and corresponding vector indices.
 
 ```C++
 #include <array>
 #include <vector>
-#include "ppl.hh"
 #include "mVSA.hpp"
 
 using namespace std;
