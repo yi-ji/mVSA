@@ -107,7 +107,7 @@ class mVSA:
     def solve(self, M, average, top_k = 1, inverse = False):
         vec_num = len(self.vectors)
         if vec_num == 1:
-            return [(self.sum_norm(self.vectors), self.vectors)]
+            return [(self.sum_norm(self.vectors), [0])]
         if top_k > 1:
             assert len(self.sub_vectors)*2 == vec_num*(vec_num-1), "All vectors must be unique when top_k > 1"
         candidates = []
