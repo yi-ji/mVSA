@@ -54,7 +54,7 @@ class mVSA:
     
     def intersect(self, generators, vec):
         for generator in generators:
-            if generator.is_ray():
+            if generator.is_ray() or generator.is_line():
                 ray_coord = generator.coefficients()
                 inner_product = sum([ray_coord[i]*vec[i] for i in range(0, self.dim)]) + 0.0
                 if abs(inner_product)/(self.norm(vec)*self.norm(ray_coord)) < self.eps[1]:

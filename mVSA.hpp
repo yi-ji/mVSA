@@ -146,7 +146,7 @@ public:
     {
         for (Generator_System::const_iterator gi = gs.begin(); gi != gs.end(); ++gi)
         {
-            if (gi->is_ray())
+            if (gi->is_ray() || gi->is_line())
             {
                 std::shared_ptr<mpf_class> ray(new mpf_class[dim], std::default_delete<mpf_class[]>());
                 std::shared_ptr<mpf_class> vec_f(new mpf_class[dim], std::default_delete<mpf_class[]>());
